@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+flickr8k.zip
+data/Images/
