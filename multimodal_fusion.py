@@ -1,6 +1,7 @@
 """
 multimodal_fusion.py
-Late-Fusion Multimodal Model for Binary Sentiment Classification from Image-Text Pairs.
+Late-Fusion Multimodal Model for Image-Text Matching (ITM).
+Predicts whether a given caption accurately describes the image (True/1 or False/0).
 Uses pre-trained ResNet50 (frozen) for the image branch and Embedding + GlobalAveragePooling for the text branch.
 """
 
@@ -133,62 +134,41 @@ def load_captions(captions_file, images_dir):
 
 
 # ==========================================
-# 2. Sentiment Label Generation
+# 2. Image-Text Matching Pair Generation
 # ==========================================
 
-POSITIVE_LEXICON = {
-    "happy", "smile", "smiles", "smiling", "cheerful", "laugh", "laughing", "laughter",
-    "joy", "joyful", "fun", "sunny", "excited", "exciting", "love", "loving", "lovely",
-    "cute", "beautiful", "celebrate", "celebrating", "win", "winner", "winning", "friend",
-    "friends", "friendly", "hugging", "hug", "kiss", "kissing", "peace", "peaceful",
-    "enjoy", "enjoying", "triumph", "park", "play", "playing", "plays", "playful",
-    "delight", "delighted", "sweet", "bright", "pleasant", "relax", "relaxing", "calm",
-    "success", "successful", "good", "great", "best", "cool", "wonderful", "funny",
-    "favorite", "glad", "proud", "amusing", "shine", "shining", "sunny", "graceful"
-}
-
-NEGATIVE_LEXICON = {
-    "sad", "sadness", "sorrow", "cry", "crying", "cried", "tear", "tears", "upset",
-    "alone", "lonely", "angry", "anger", "scream", "screaming", "fight", "fighting",
-    "fall", "falling", "fell", "hurt", "hurting", "injure", "injured", "injury",
-    "accident", "danger", "dangerous", "dark", "gloomy", "dirt", "dirty", "muddy",
-    "hazard", "abandoned", "sick", "fear", "afraid", "scared", "dead", "distress",
-    "distressed", "frown", "frowning", "pain", "painful", "harsh", "broke", "broken",
-    "aggressive", "attack", "attacked", "struggle", "struggling", "grief", "lost", "bad",
-    "poor", "ugly", "worried", "grave", "trouble", "threat", "storm", "destroy", "damaged"
-}
-
-
-def compute_sentiment_score(text):
+def generate_itm_pairs(df):
     """
-    Computes a continuous sentiment polarity score from text using lexicon match
-    and fallback heuristic for descriptive captions.
+    Generates positive and negative image-text pairs for the ITM task.
+    Positive pairs (Label 1): Original image + correct caption.
+    Negative pairs (Label 0): Original image + randomly sampled mismatched caption.
     """
-    words = re.findall(r"\b[a-z]+\b", text.lower())
-    pos_count = sum(1 for w in words if w in POSITIVE_LEXICON)
-    neg_count = sum(1 for w in words if w in NEGATIVE_LEXICON)
-
-    diff = pos_count - neg_count
-    if diff != 0:
-        return diff
-
-    # Deterministic heuristic based on token balance for neutral descriptions
-    token_sum = sum(ord(c) for c in text[:10])
-    return 1 if (token_sum % 2 == 0) else -1
-
-
-def assign_sentiment_labels(df):
-    """
-    Assigns binary sentiment labels (0: Negative/Neutral, 1: Positive).
-    Ensures balanced distribution across classes.
-    """
-    scores = df["caption"].apply(compute_sentiment_score).values
-    labels = (scores > 0).astype(np.float32)
-
-    df["sentiment"] = labels
-    pos_ratio = (labels == 1.0).mean() * 100
-    print(f"[Sentiment] Assigned binary labels -> Positive: {pos_ratio:.1f}%, Negative: {100-pos_ratio:.1f}%")
-    return df
+    print("[ITM] Generating positive and negative image-text pairs...")
+    
+    # 1. Create positive pairs
+    pos_df = df.copy()
+    pos_df["label"] = 1.0
+    
+    # 2. Create negative pairs by shuffling captions
+    neg_df = df.copy()
+    shuffled_captions = neg_df["caption"].sample(frac=1, random_state=42).values
+    
+    # Ensure they are actually mismatched
+    original_captions = neg_df["caption"].values
+    for i in range(len(shuffled_captions)):
+        if shuffled_captions[i] == original_captions[i]:
+            shuffled_captions[i] = original_captions[(i + 1) % len(original_captions)]
+            
+    neg_df["caption"] = shuffled_captions
+    neg_df["label"] = 0.0
+    
+    # 3. Combine and shuffle the dataset
+    itm_df = pd.concat([pos_df, neg_df], ignore_index=True)
+    itm_df = itm_df.sample(frac=1, random_state=42).reset_index(drop=True)
+    
+    pos_ratio = (itm_df["label"] == 1.0).mean() * 100
+    print(f"[ITM] Created {len(itm_df)} total pairs -> Match (1): {pos_ratio:.1f}%, Mismatch (0): {100-pos_ratio:.1f}%")
+    return itm_df
 
 
 # ==========================================
@@ -277,12 +257,12 @@ def build_multimodal_late_fusion_model(vocab_size=5000, max_seq_len=30, embeddin
     fusion_dense = layers.Dense(64, activation="relu", name="fusion_dense_2")(fusion_dense)
 
     # --- Binary Classification Head ---
-    sentiment_output = layers.Dense(1, activation="sigmoid", name="sentiment_output")(fusion_dense)
+    itm_output = layers.Dense(1, activation="sigmoid", name="itm_output")(fusion_dense)
 
     model = Model(
         inputs=[image_input, text_input],
-        outputs=sentiment_output,
-        name="LateFusion_ResNet50_TextGAP_Sentiment"
+        outputs=itm_output,
+        name="LateFusion_ResNet50_TextGAP_ITM"
     )
 
     return model
@@ -294,7 +274,7 @@ def build_multimodal_late_fusion_model(vocab_size=5000, max_seq_len=30, embeddin
 
 def run_pipeline(args):
     print("=" * 70)
-    print("MULTIMODAL LATE-FUSION SENTIMENT ANALYSIS (IMAGE + TEXT)")
+    print("MULTIMODAL LATE-FUSION IMAGE-TEXT MATCHING (IMAGE + TEXT)")
     print("=" * 70)
 
     # 1. Locate files
@@ -307,8 +287,8 @@ def run_pipeline(args):
         print(f"[Sampling] Selecting {args.max_samples} samples for fast efficient training...")
         df = df.sample(n=args.max_samples, random_state=42).reset_index(drop=True)
 
-    # 3. Sentiment labeling
-    df = assign_sentiment_labels(df)
+    # 3. Generate ITM Pairs
+    df = generate_itm_pairs(df)
 
     # 4. Text Vectorization
     print("\n[NLP] Adapting TextVectorization on captions...")
@@ -333,11 +313,11 @@ def run_pipeline(args):
 
     train_paths = df["image_path"].values[train_idx]
     train_tokens = tokenized_captions[train_idx]
-    train_labels = df["sentiment"].values[train_idx]
+    train_labels = df["label"].values[train_idx]
 
     val_paths = df["image_path"].values[val_idx]
     val_tokens = tokenized_captions[val_idx]
-    val_labels = df["sentiment"].values[val_idx]
+    val_labels = df["label"].values[val_idx]
 
     print(f"[Split] Train samples: {len(train_paths)}, Validation samples: {len(val_paths)}")
 
@@ -401,15 +381,15 @@ def run_pipeline(args):
         # Display first 5 samples
         for i in range(min(5, len(preds))):
             pred_score = preds[i]
-            pred_class = "Positive (1)" if pred_score >= 0.5 else "Negative (0)"
-            true_class = "Positive (1)" if sample_true_labels[i].numpy() == 1.0 else "Negative (0)"
+            pred_class = "Match (1)" if pred_score >= 0.5 else "Mismatch (0)"
+            true_class = "Match (1)" if sample_true_labels[i].numpy() == 1.0 else "Mismatch (0)"
             print(f"Sample {i+1}:")
             print(f"  Predicted Probability: {pred_score:.4f} -> {pred_class}")
             print(f"  True Label:           {true_class}")
             print("-" * 40)
 
     # 11. Save model
-    model_save_path = "multimodal_late_fusion_model.keras"
+    model_save_path = "multimodal_late_fusion_itm_model.keras"
     model.save(model_save_path)
     print(f"\n[Saved] Model weights and architecture saved to: {model_save_path}")
     print("[Complete] Multimodal late-fusion training pipeline finished successfully!")
