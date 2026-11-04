@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>CADF-ITM — Multimodal Image-Text Matching</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface2: #21262d;
+    --border: #30363d;
+    --accent: #58a6ff;
+    --accent2: #bc8cff;
+    --green: #3fb950;
+    --red: #f85149;
+    --yellow: #d29922;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --radius: 12px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    min-height: 100vh;
+    padding: 24px;
+  }
+
+  header {
+    text-align: center;
+    margin-bottom: 32px;
+  }
+  header h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  header p {
+    color: var(--muted);
+    margin-top: 6px;
+    font-size: 0.95rem;
+  }
+  .badge-row {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+  }
+  .badge {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 4px 12px;
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+  .badge span { color: var(--accent); font-weight: 600; }
+
+  .main-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
+  @media (max-width: 750px) { .main-grid { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+  }
+  .card h2 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card h2 .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    display: inline-block;
+  }
+
+  /* Drop Zone */
+  #drop-zone {
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    min-height: 220px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
+    background: var(--surface2);
+  }
+  #drop-zone:hover, #drop-zone.drag-over {
+    border-color: var(--accent);
+    background: rgba(88, 166, 255, 0.05);
+  }
+  #drop-zone img {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    position: absolute;
+    top: 0; left: 0;
+    border-radius: var(--radius);
+  }
+  #drop-zone .placeholder {
+    text-align: center;
+    pointer-events: none;
+  }
+  #drop-zone .placeholder svg { opacity: 0.3; }
+  #drop-zone .placeholder p {
+    color: var(--muted);
+    font-size: 0.875rem;
+    margin-top: 8px;
+  }
+  #drop-zone.has-image .placeholder { display: none; }
+  #file-input { display: none; }
+
+  /* Caption */
+  textarea {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    padding: 12px;
+    font-size: 0.95rem;
+    resize: vertical;
+    min-height: 100px;
+    transition: border-color 0.2s;
+    font-family: inherit;
+    line-height: 1.5;
+  }
+  textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+  .char-count {
+    text-align: right;
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  /* Model selector */
+  .model-toggle {
+    display: flex;
+    gap: 0;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 16px;
+  }
+  .model-toggle button {
+    flex: 1;
+    padding: 9px 12px;
+    background: var(--surface2);
+    border: none;
+    color: var(--muted);
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: inherit;
+  }
+  .model-toggle button.active {
+    background: var(--accent);
+    color: #000;
+    font-weight: 600;
+  }
+
+  /* Analyze button */
+  #analyze-btn {
+    width: 100%;
+    padding: 13px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border: none;
+    border-radius: 8px;
+    color: #000;
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+    margin-top: 16px;
+    letter-spacing: 0.02em;
+  }
+  #analyze-btn:hover { opacity: 0.9; }
+  #analyze-btn:active { transform: scale(0.98); }
+  #analyze-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* Result panel */
+  #result-panel { display: none; }
+
+  .score-ring-wrap {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 20px;
+  }
+  .score-ring {
+    position: relative;
+    width: 160px;
+    height: 160px;
+  }
+  .score-ring svg { transform: rotate(-90deg); }
+  .score-ring .score-label {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    transform: none;
+  }
+  .score-ring .score-num {
+    font-size: 2rem;
+    font-weight: 800;
+    line-height: 1;
+  }
+  .score-ring .score-pct {
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  .verdict-banner {
+    text-align: center;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 1.1rem;
+    margin-bottom: 16px;
+    letter-spacing: 0.04em;
+  }
+  .verdict-match { background: rgba(63,185,80,0.15); color: var(--green); border: 1px solid var(--green); }
+  .verdict-mismatch { background: rgba(248,81,73,0.15); color: var(--red); border: 1px solid var(--red); }
+
+  .stat-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .stat-box {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    text-align: center;
+  }
+  .stat-box .stat-val {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--accent);
+  }
+  .stat-box .stat-lbl {
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin-top: 2px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .gate-bar-wrap {
+    margin-top: 14px;
+  }
+  .gate-bar-wrap h4 {
+    font-size: 0.8rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 8px;
+  }
+  .gate-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 7px;
+  }
+  .gate-bar-row span { font-size: 0.82rem; color: var(--muted); width: 90px; flex-shrink: 0; }
+  .gate-bar-row span.val { width: 40px; text-align: right; color: var(--text); font-weight: 600; }
+  .gate-bar-track {
+    flex: 1;
+    height: 8px;
+    background: var(--surface2);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .gate-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.6s cubic-bezier(.25,.8,.25,1);
+  }
+  .vis-fill { background: linear-gradient(90deg, #58a6ff, #79c0ff); }
+  .txt-fill { background: linear-gradient(90deg, #bc8cff, #d2a8ff); }
+
+  /* Quick examples */
+  .examples-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .example-chip {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 5px 12px;
+    font-size: 0.8rem;
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .example-chip:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* Loading state */
+  .spinner {
+    display: inline-block;
+    width: 18px; height: 18px;
+    border: 2px solid rgba(0,0,0,0.3);
+    border-top-color: #000;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    vertical-align: middle;
+    margin-right: 6px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* History sidebar */
+  .history-item {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: border-color 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .history-item:hover { border-color: var(--accent); }
+  .history-item img { width: 40px; height: 40px; object-fit: cover; border-radius: 5px; flex-shrink: 0; }
+  .history-item-text { flex: 1; min-width: 0; }
+  .history-item-text .h-caption { font-size: 0.82rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .history-item-text .h-score { font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
+  .h-badge { font-size: 0.7rem; font-weight: 700; padding: 2px 7px; border-radius: 10px; flex-shrink: 0; }
+  .h-match { background: rgba(63,185,80,0.15); color: var(--green); }
+  .h-mismatch { background: rgba(248,81,73,0.15); color: var(--red); }
+
+  /* error box */
+  .error-box { background: rgba(248,81,73,0.1); border: 1px solid var(--red); border-radius: 8px; padding: 12px; color: var(--red); font-size: 0.9rem; margin-top: 16px; }
+
+  footer {
+    text-align: center;
+    margin-top: 40px;
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>⚡ CADF-ITM Multimodal Fusion</h1>
+  <p>Cross-Attention & Dynamic-Gated Image-Text Matching · Assam Science and Technology University</p>
+  <div class="badge-row">
+    <div class="badge">ResNet50 <span>Frozen</span></div>
+    <div class="badge">Bidirectional <span>Cross-Attention</span></div>
+    <div class="badge">Dynamic <span>Reliability Gating</span></div>
+    <div class="badge">Joint <span>BCE + Contrastive Loss</span></div>
+  </div>
+</header>
+
+<div class="main-grid" style="grid-template-columns: 1fr 1fr 340px;">
+
+  <!-- Input Card -->
+  <div class="card">
+    <h2><span class="dot"></span> Upload Image</h2>
+    <div id="drop-zone" onclick="document.getElementById('file-input').click()">
+      <div class="placeholder">
+        <svg width="48" height="48" fill="none" stroke="#8b949e" stroke-width="1.5" viewBox="0 0 24 24">
+          <path d="M4 16l4-4 4 4 4-6 4 6"/>
+          <rect x="3" y="3" width="18" height="18" rx="2"/>
+        </svg>
+        <p>Click or drag an image here<br><small>JPG / PNG / WEBP</small></p>
+      </div>
+    </div>
+    <input type="file" id="file-input" accept="image/*"/>
+
+    <div style="margin-top:20px;">
+      <h2 style="margin-bottom:8px;"><span class="dot" style="background:var(--accent2)"></span> Caption / Query</h2>
+      <textarea id="caption-input" placeholder="Describe what you see in the image, or write a caption to test against it..." oninput="updateCharCount(this)"></textarea>
+      <div class="char-count"><span id="char-count">0</span> chars</div>
+
+      <div class="examples-row" id="examples-row">
+        <div class="example-chip" onclick="setCaption('A dog running in green grass near a fence.')">🐕 Dog in grass</div>
+        <div class="example-chip" onclick="setCaption('A person skiing down a snowy mountain slope.')">⛷️ Skiing snow</div>
+        <div class="example-chip" onclick="setCaption('Children playing near a beach with ocean waves.')">🏖️ Beach scene</div>
+        <div class="example-chip" onclick="setCaption('A brown dog chasing a garden hose stream.')">💧 Dog hose</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Config + Output Card -->
+  <div class="card">
+    <h2><span class="dot" style="background:var(--accent2)"></span> Model & Settings</h2>
+    <div class="model-toggle">
+      <button id="btn-cadf" class="active" onclick="selectModel('cadf')">🚀 CADF-ITM (Novel)</button>
+      <button id="btn-baseline" onclick="selectModel('baseline')">📦 Baseline Late Fusion</button>
+    </div>
+
+    <div style="font-size:0.82rem; color:var(--muted); background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:10px; margin-bottom:16px;" id="model-desc">
+      <strong style="color:var(--accent)">CADF-ITM</strong>: Uses bidirectional cross-attention between spatial image patches (7×7 grid) and word tokens — each word can attend directly to visual regions. Dynamic reliability gating prevents modality collapse.
+    </div>
+
+    <button id="analyze-btn" onclick="analyze()" disabled>🔍 Analyze Image-Caption Pair</button>
+
+    <div id="error-box"></div>
+
+    <div id="result-panel">
+      <div style="height:1px; background:var(--border); margin: 20px 0;"></div>
+
+      <div class="score-ring-wrap">
+        <div class="score-ring">
+          <svg width="160" height="160" viewBox="0 0 160 160">
+            <circle cx="80" cy="80" r="65" fill="none" stroke="var(--surface2)" stroke-width="14"/>
+            <circle id="score-arc" cx="80" cy="80" r="65" fill="none" stroke-width="14"
+                    stroke-linecap="round"
+                    stroke-dasharray="408.41"
+                    stroke-dashoffset="408.41"
+                    style="transition: stroke-dashoffset 0.8s cubic-bezier(.25,.8,.25,1); stroke:var(--green)"/>
+          </svg>
+          <div class="score-label">
+            <div class="score-num" id="score-num">—</div>
+            <div class="score-pct">match prob.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="verdict-banner" id="verdict-banner">—</div>
+
+      <div class="stat-grid">
+        <div class="stat-box">
+          <div class="stat-val" id="stat-confidence">—</div>
+          <div class="stat-lbl">Confidence</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-val" id="stat-model">—</div>
+          <div class="stat-lbl">Model Used</div>
+        </div>
+      </div>
+
+      <div class="gate-bar-wrap" id="gate-bar-wrap" style="display:none;">
+        <h4>⚖️ Dynamic Modality Reliability Weights</h4>
+        <div class="gate-bar-row">
+          <span>🖼️ Visual Gate</span>
+          <div class="gate-bar-track"><div class="gate-bar-fill vis-fill" id="gate-vis-bar" style="width:50%"></div></div>
+          <span class="val" id="gate-vis-val">50%</span>
+        </div>
+        <div class="gate-bar-row">
+          <span>📝 Text Gate</span>
+          <div class="gate-bar-track"><div class="gate-bar-fill txt-fill" id="gate-txt-bar" style="width:50%"></div></div>
+          <span class="val" id="gate-txt-val">50%</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- History Card -->
+  <div class="card">
+    <h2><span class="dot" style="background:var(--green)"></span> Analysis History</h2>
+    <div id="history-list">
+      <p style="color:var(--muted); font-size:0.85rem; text-align:center; padding: 20px 0;">No analysis yet. Upload an image and caption to get started.</p>
+    </div>
+    <div style="margin-top:14px; border-top: 1px solid var(--border); padding-top:14px;">
+      <h2 style="margin-bottom:10px;"><span class="dot" style="background:var(--yellow)"></span> Quick Test Pairs</h2>
+      <p style="font-size:0.8rem; color:var(--muted); margin-bottom:10px;">Load preloaded benchmark images from the research paper:</p>
+      <div id="quicktest-btns">
+        <button class="example-chip" style="display:block; width:100%; margin-bottom:6px; text-align:left;" onclick="loadQuickTest(0)">Figure 1 — Boston Terrier + Lawn Caption ✅</button>
+        <button class="example-chip" style="display:block; width:100%; margin-bottom:6px; text-align:left;" onclick="loadQuickTest(1)">Figure 2 — Greyhound + Snow Caption ✅</button>
+        <button class="example-chip" style="display:block; width:100%; margin-bottom:6px; text-align:left;" onclick="loadQuickTest(2)">Figure 3 — Brown Dog + Hose Caption ✅</button>
+        <button class="example-chip" style="display:block; width:100%; margin-bottom:6px; text-align:left;" onclick="loadQuickTest(3)">Figure 4 — Black Dog + Ocean Caption ✅</button>
+        <button class="example-chip" style="display:block; width:100%; margin-bottom:6px; text-align:left;" onclick="loadQuickTest(4)">Hard Negative — Figure 2 + Hose Caption ❌</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <p>CADF-ITM · Cross-Attention & Dynamic-Gated Multimodal Fusion · Assam Science and Technology University · 2026</p>
+  <p style="margin-top:4px;">PyTorch · ResNet50 · 24.9M Parameters (23.5M Frozen ResNet50 + 1.4M Trainable)</p>
+</footer>
+
+<script>
+let selectedModel = 'cadf';
+let uploadedFile = null;
+let historyItems = [];
+
+const quickTests = [
+  { img_key: 'fig1', caption: 'A black and white Boston terrier runs across a green lawn in front of a white picket fence.' },
+  { img_key: 'fig2', caption: 'A white and tan greyhound leaps through the snow, kicking up a spray of snow behind it.' },
+  { img_key: 'fig3', caption: 'A brown dog runs across a grassy yard beside a green garden hose and a stream of water.' },
+  { img_key: 'fig4', caption: 'A black dog with a red collar stands in shallow ocean waves splashing on the beach.' },
+  { img_key: 'fig2', caption: 'A brown dog runs across a grassy yard beside a green garden hose and a stream of water.' },
+];
+
+// Drag-drop
+const dz = document.getElementById('drop-zone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (f) handleFile(f);
+});
+document.getElementById('file-input').addEventListener('change', e => {
+  if (e.target.files[0]) handleFile(e.target.files[0]);
+});
+
+function handleFile(file) {
+  uploadedFile = file;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    let img = dz.querySelector('img');
+    if (!img) { img = document.createElement('img'); dz.appendChild(img); }
+    img.src = ev.target.result;
+    dz.classList.add('has-image');
+    checkReady();
+  };
+  reader.readAsDataURL(file);
+}
+
+function updateCharCount(el) {
+  document.getElementById('char-count').textContent = el.value.length;
+  checkReady();
+}
+
+function checkReady() {
+  const btn = document.getElementById('analyze-btn');
+  btn.disabled = !(uploadedFile && document.getElementById('caption-input').value.trim().length > 3);
+}
+
+function selectModel(m) {
+  selectedModel = m;
+  document.getElementById('btn-cadf').classList.toggle('active', m === 'cadf');
+  document.getElementById('btn-baseline').classList.toggle('active', m === 'baseline');
+  const desc = document.getElementById('model-desc');
+  if (m === 'cadf') {
+    desc.innerHTML = '<strong style="color:var(--accent)">CADF-ITM</strong>: Uses bidirectional cross-attention between spatial image patches (7×7 grid) and word tokens — each word can attend directly to visual regions. Dynamic reliability gating prevents modality collapse.';
+  } else {
+    desc.innerHTML = '<strong style="color:var(--muted)">Baseline Late Fusion</strong>: Frozen ResNet50 → 128-d Global Average Pool → Dense projection. Text: Embedding + GAP → 128-d. Both vectors concatenated and fed to MLP judge. No cross-modal attention.';
+  }
+}
+
+function setCaption(text) {
+  const ta = document.getElementById('caption-input');
+  ta.value = text;
+  document.getElementById('char-count').textContent = text.length;
+  checkReady();
+}
+
+function loadQuickTest(idx) {
+  const qt = quickTests[idx];
+  setCaption(qt.caption);
+  // Fetch thumbnail via quick endpoint
+  fetch('/quick_image/' + qt.img_key)
+    .then(r => r.blob())
+    .then(blob => {
+      uploadedFile = new File([blob], qt.img_key + '.jpg', { type: 'image/jpeg' });
+      const reader = new FileReader();
+      reader.onload = ev => {
+        let img = dz.querySelector('img');
+        if (!img) { img = document.createElement('img'); dz.appendChild(img); }
+        img.src = ev.target.result;
+        dz.classList.add('has-image');
+        checkReady();
+      };
+      reader.readAsDataURL(uploadedFile);
+    })
+    .catch(e => showError('Could not load quick test image: ' + e.message));
+}
+
+function showError(msg) {
+  const eb = document.getElementById('error-box');
+  eb.innerHTML = '<div class="error-box">⚠️ ' + msg + '</div>';
+  setTimeout(() => { eb.innerHTML = ''; }, 6000);
+}
+
+async function analyze() {
+  const caption = document.getElementById('caption-input').value.trim();
+  if (!uploadedFile || !caption) return;
+
+  const btn = document.getElementById('analyze-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Analyzing...';
+  document.getElementById('error-box').innerHTML = '';
+
+  const fd = new FormData();
+  fd.append('image', uploadedFile);
+  fd.append('caption', caption);
+  fd.append('model', selectedModel);
+
+  try {
+    const res = await fetch('/predict', { method: 'POST', body: fd });
+    const data = await res.json();
+
+    if (!res.ok || data.error) {
+      showError(data.error || 'Server error');
+      return;
+    }
+
+    showResult(data, caption);
+    addHistory(data, caption);
+
+  } catch (e) {
+    showError('Request failed: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '🔍 Analyze Image-Caption Pair';
+    checkReady();
+  }
+}
+
+function showResult(data, caption) {
+  document.getElementById('result-panel').style.display = 'block';
+
+  const score = data.score;
+  const isMatch = score >= 0.5;
+  const pct = Math.round(score * 100);
+  const confidence = isMatch ? pct : (100 - pct);
+
+  // Animated ring
+  const circ = 2 * Math.PI * 65;
+  const arc = document.getElementById('score-arc');
+  arc.style.stroke = isMatch ? 'var(--green)' : 'var(--red)';
+  setTimeout(() => {
+    arc.style.strokeDashoffset = circ - (circ * score);
+  }, 50);
+
+  document.getElementById('score-num').textContent = pct + '%';
+
+  const vb = document.getElementById('verdict-banner');
+  if (isMatch) {
+    vb.className = 'verdict-banner verdict-match';
+    vb.textContent = '✅ MATCH — Caption correctly describes the image';
+  } else {
+    vb.className = 'verdict-banner verdict-mismatch';
+    vb.textContent = '❌ MISMATCH — Caption does not match the image';
+  }
+
+  document.getElementById('stat-confidence').textContent = confidence + '%';
+  document.getElementById('stat-model').textContent = data.model === 'cadf' ? 'CADF-ITM' : 'Baseline';
+
+  // Gate bars (CADF only)
+  const gw = document.getElementById('gate-bar-wrap');
+  if (data.gate_vis !== undefined && data.gate_txt !== undefined) {
+    gw.style.display = 'block';
+    const vPct = Math.round(data.gate_vis * 100);
+    const tPct = Math.round(data.gate_txt * 100);
+    document.getElementById('gate-vis-bar').style.width = vPct + '%';
+    document.getElementById('gate-txt-bar').style.width = tPct + '%';
+    document.getElementById('gate-vis-val').textContent = vPct + '%';
+    document.getElementById('gate-txt-val').textContent = tPct + '%';
+  } else {
+    gw.style.display = 'none';
+  }
+}
+
+function addHistory(data, caption) {
+  const imgEl = dz.querySelector('img');
+  const imgSrc = imgEl ? imgEl.src : '';
+  const score = Math.round(data.score * 100);
+  const isMatch = data.score >= 0.5;
+
+  historyItems.unshift({ imgSrc, caption, score, isMatch, model: data.model });
+  if (historyItems.length > 8) historyItems.pop();
+
+  const hl = document.getElementById('history-list');
+  hl.innerHTML = historyItems.map((h, i) => `
+    <div class="history-item" onclick="recallHistory(${i})">
+      ${h.imgSrc ? `<img src="${h.imgSrc}" alt="">` : '<div style="width:40px;height:40px;background:var(--surface2);border-radius:5px;flex-shrink:0"></div>'}
+      <div class="history-item-text">
+        <div class="h-caption">${h.caption}</div>
+        <div class="h-score">${h.score}% · ${h.model === 'cadf' ? 'CADF-ITM' : 'Baseline'}</div>
+      </div>
+      <div class="h-badge ${h.isMatch ? 'h-match' : 'h-mismatch'}">${h.isMatch ? 'MATCH' : 'MISS'}</div>
+    </div>
+  `).join('');
+}
+
+function recallHistory(i) {
+  const h = historyItems[i];
+  setCaption(h.caption);
+  selectModel(h.model);
+}
+</script>
+</body>
+</html>
+
