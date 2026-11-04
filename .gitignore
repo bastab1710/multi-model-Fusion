@@ -18,3 +18,9 @@ data/
 *.pt
 *.pth
 *.keras
+
+# Local environments and generated files
+.venv/
+.venv312/
+artifacts/
+backups/

@@ -6,7 +6,7 @@ An end-to-end deep learning framework for **Image-Text Matching (ITM)** using a 
 
 ---
 
-## 🏆 Benchmark Results
+## 🏆 Illustrative Example Results (8 Image-Text Pairs)
 
 | Pair | Type | Baseline (Late Fusion) | **CADF-ITM (Novel)** |
 |------|------|:---:|:---:|
@@ -91,9 +91,9 @@ multi-model-Fusion-main/
 │
 ├── 📥 download_dataset.py              Kaggle Flickr8k downloader + verifier
 │
-├── ✅ cadf_multimodal_model.pt         Trained CADF-ITM weights
-├── ✅ multimodal_late_fusion_model.pt  Trained Baseline weights
-├── 📖 vocab.json                       Saved vocabulary
+├── 📖 vocab.json                       Saved vocabulary (if available)
+│
+├── 💾 Model checkpoints               Generated locally during training; not committed
 │
 ├── 🚀 START_APP.bat                    One-click launch (Windows)
 └── 📋 requirements.txt                 Python dependencies
