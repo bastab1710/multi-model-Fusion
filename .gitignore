@@ -24,3 +24,16 @@ data/
 .venv312/
 artifacts/
 backups/
+
+# Weedy Rice experiment: local dataset
+/WeedyRice-RGBMS-DB/
+/experiments/weedy_rice/data/raw/
+
+# Model checkpoints and training histories
+*.pth
+*.pt
+
+# Python environments and cache
+.venv/
+.venv312/
+__pycache__/
